@@ -1,6 +1,19 @@
 (async () => {
+  // --- timing configuration (ms) ---
+  const TICK_POLL_INTERVAL = 2000;       // wait when paused before re-ticking
+  const GAME_OVER_WAIT = 3000;           // pause after game over before restart attempt
+  const RESTART_FAIL_WAIT = 5000;        // extra wait if session restart fails
+  const POST_ANSWER_DELAY = 150;         // cooldown after submitting an answer
+  const ROW_STALE_CHECK_DELAY = 200;     // extra wait if row hasn't cleared yet
+  const INTER_ROW_DELAY = 50;            // final buffer before next iteration
+  const ERROR_RECOVERY_WAIT = 500;       // short backoff on submit/tick errors
+  const UNEXPECTED_ERROR_WAIT = 2000;    // longer backoff on unexpected failures
+  const SESSION_LOST_WAIT = 3000;        // wait before restarting lost session
+  const BASE_RETRY_BACKOFF = 300;        // multiplier base for safeFetch retries
+
+  // --- schema & setup (unchanged) ---
   const { z } = await import("https://esm.sh/zod");
-  
+
   const RowSchema = z.object({
     id: z.number(),
     mode: z.enum(["toBinary", "toDecimal"]),
@@ -42,7 +55,7 @@
       } catch (err) {
         console.warn(`%cFetch failed (${i + 1}/${retries}): ${err.message}`, "color: orange");
         if (i === retries - 1) throw err;
-        await new Promise(r => setTimeout(r, 300 * (i + 1))); // exponential backoff
+        await new Promise(r => setTimeout(r, BASE_RETRY_BACKOFF * (i + 1)));
       }
     }
   };
@@ -54,21 +67,20 @@
   while (!window.__STOP_SOLVER) {
     try {
       if (gameState.paused) {
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, TICK_POLL_INTERVAL));
         gameState = await safeFetch(`${baseUrl}/sessions/${gameState.sessionId}/tick`, { method: "POST" });
         continue;
       }
 
       if (gameState.gameOver) {
         console.log("%cGame over detected, waiting for new session or manual stop...", "color: yellow");
-        await new Promise(r => setTimeout(r, 3000));
-        // try to restart session automatically
+        await new Promise(r => setTimeout(r, GAME_OVER_WAIT));
         try {
           gameState = await safeFetch(`${baseUrl}/sessions`, { method: "POST" });
           console.log(`%cNew session ${gameState.sessionId} started`, "color: green");
         } catch {
           console.log("%cFailed to restart, retrying in 5s...", "color: orange");
-          await new Promise(r => setTimeout(r, 5000));
+          await new Promise(r => setTimeout(r, RESTART_FAIL_WAIT));
         }
         continue;
       }
@@ -101,42 +113,42 @@
           gameState = ansState;
         } catch (err) {
           console.error(`%c✗ Failed to submit row ${currentRowId}: ${err.message}`, "color: red");
-          await new Promise(r => setTimeout(r, 500));
+          await new Promise(r => setTimeout(r, ERROR_RECOVERY_WAIT));
         }
 
-        await new Promise(r => setTimeout(r, 150));
+        await new Promise(r => setTimeout(r, POST_ANSWER_DELAY));
 
         try {
           gameState = await safeFetch(`${baseUrl}/sessions/${gameState.sessionId}/tick`, { method: "POST" });
         } catch (err) {
           console.error(`%c✗ Tick failed: ${err.message}`, "color: red");
-          await new Promise(r => setTimeout(r, 500));
+          await new Promise(r => setTimeout(r, ERROR_RECOVERY_WAIT));
           continue;
         }
 
         if (gameState.rows.length > 0 && gameState.rows[0].id === currentRowId) {
-          await new Promise(r => setTimeout(r, 200));
+          await new Promise(r => setTimeout(r, ROW_STALE_CHECK_DELAY));
           try {
             gameState = await safeFetch(`${baseUrl}/sessions/${gameState.sessionId}/tick`, { method: "POST" });
           } catch {}
         }
 
-        await new Promise(r => setTimeout(r, 50));
+        await new Promise(r => setTimeout(r, INTER_ROW_DELAY));
       }
 
-      await new Promise(r => setTimeout(r, 100));
+      await new Promise(r => setTimeout(r, INTER_ROW_DELAY));
       try {
         gameState = await safeFetch(`${baseUrl}/sessions/${gameState.sessionId}/tick`, { method: "POST" });
       } catch {}
 
     } catch (err) {
       console.error(`%cUnexpected error: ${err.message} - recovering...`, "color: red");
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, UNEXPECTED_ERROR_WAIT));
       try {
         gameState = await safeFetch(`${baseUrl}/sessions/${gameState.sessionId}/tick`, { method: "POST" });
       } catch {
         console.log("%cSession lost, attempting restart...", "color: yellow");
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, SESSION_LOST_WAIT));
         try {
           gameState = await safeFetch(`${baseUrl}/sessions`, { method: "POST" });
         } catch {}
