@@ -9,6 +9,11 @@
     pollInterval: 2000
   };
 
+  // Concentric rings from center outward (pre-sorted by distance)
+  // Ring 0: center 4 cells
+  // Ring 1: next 8 cells
+  // Ring 2: next 12 cells  
+  // Remaining rings fill outward to edges
   const RINGS = [
     ["E5","E6","F5","F6"],
     ["D5","G5","E4","F4","E7","F7","D6","G6"],
@@ -24,6 +29,7 @@
   const coordToIdx = (c) => ({ r: LETTERS.indexOf(c[0]), c: parseInt(c.slice(1), 10) - 1 });
   const idxToCoord = (r, c) => `${LETTERS[r]}${c + 1}`;
 
+  // Fisher-Yates shuffle
   function shuffle(arr) {
     const a = [...arr];
     for (let i = a.length - 1; i > 0; i--) {
@@ -33,6 +39,8 @@
     return a;
   }
 
+  // Generate shuffled opening sequence once per session
+  // Takes 1 from ring 0, 2 from ring 1, 3 from ring 2, then all remaining
   function generateOpeningSequence() {
     const seq = [];
     const counts = [1, 2, 3]; // shots per ring for first 6
@@ -210,4 +218,11 @@
 
       console.log(`shooting ${coord}`);
       await fetch(CONFIG.shootUrl, {
-        method:
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ coordinate: coord })
+      });
+    } catch (err) { console.error("bot error:", err); }
+  }, CONFIG.pollInterval);
+})();
