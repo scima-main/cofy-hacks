@@ -3,14 +3,14 @@
   if (!match) return console.error("no class id found in current url");
 
   const classId = match[1];
-  const raw = prompt(`enter raw score for class ${classId} (terminus):`, "10");
+  const raw = prompt(`enter raw score for class ${classId} (bashcrawl):`, "10");
   if (raw === null) return console.log("cancelled");
 
   const score = Number(raw);
   if (Number.isNaN(score)) return console.error("invalid number");
 
   try {
-    const res = await fetch(`https://cofy.uk/api/classes/${classId}/games/terminus/scores`, {
+    const res = await fetch(`https://cofy.uk/api/classes/${classId}/games/bashcrawl/scores`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ score }),
