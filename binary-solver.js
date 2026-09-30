@@ -11,7 +11,6 @@
   const SESSION_LOST_WAIT = 3000;        // wait before restarting lost session
   const BASE_RETRY_BACKOFF = 300;        // multiplier base for safeFetch retries
 
-  // --- schema & setup (unchanged) ---
   const { z } = await import("https://esm.sh/zod");
 
   const RowSchema = z.object({
